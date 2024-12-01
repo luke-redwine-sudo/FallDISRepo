@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Draw Polygons</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        .polygon-label {
+            background: rgba(255, 255, 255, 0.7);
+            border: 1px solid black;
+            border-radius: 4px;
+            padding: 2px;
+            font-size: 12px;
+        }
+        #color-picker {
+            display: none;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+<div id="map" style="width: 100%; height: 600px;"></div>
+<button onclick="submitPolygons()">Submit Polygons</button>
+<br>
+<label for="latitude">Latitude:</label>
+<input type="text" id="latitude" placeholder="Enter latitude">
+<label for="longitude">Longitude:</label>
+<input type="text" id="longitude" placeholder="Enter longitude">
+<button onclick="checkPoint()">Check Point</button>
+<br><br>
+<label for="csvFile">Upload CSV File:</label>
+<input type="file" id="csvFile" accept=".csv">
+<button onclick="submitCSV()">Submit CSV</button>
+
+<div id="color-picker">
+    <label for="color">Pick a color for the polygon:</label>
+    <input type="color" id="color" value="#FF5733">
+</div>
+
+<script>
+    // Initialize the map
+    var map = L.map('map').setView([0, 0], 2);
+
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Tiles © Esri',
+        maxZoom: 19
+    }).addTo(map);
+
+    var drawnItems = new L.FeatureGroup();
+    map.addLayer(drawnItems);
+
+    var drawControl = new L.Control.Draw({
+        edit: {
+            featureGroup: drawnItems,
+            remove: true
+        },
+        draw: {
+            polygon: true,
+            rectangle: true,
+            polyline: false,
+            circle: false,
+            marker: false,
+            circlemarker: false
+        }
+    });
+    map.addControl(drawControl);
+
+    map.on(L.Draw.Event.CREATED, function (e) {
+        var layer = e.layer;
+        drawnItems.addLayer(layer);
+
+        document.getElementById('color-picker').style.display = 'block';
+
+        layer.selectedColor = document.getElementById('color').value;
+        layer.bindTooltip(layer.selectedColor, { permanent: true, direction: 'center' }).openTooltip();
+
+        document.getElementById('color').oninput = function () {
+            layer.selectedColor = this.value;
+            layer.setStyle({ color: layer.selectedColor });
+            layer.bindTooltip(layer.selectedColor, { permanent: true, direction: 'center' }).openTooltip();
+        };
+    });
+
+    function submitPolygons() {
+        var geojsonData = drawnItems.toGeoJSON();
+        for (var i = 0; i < geojsonData.features.length; i++) {
+            geojsonData.features[i].properties.label = prompt("Enter a label for this area:", "Unnamed Area");
+            geojsonData.features[i].properties.color = drawnItems.getLayers()[i].selectedColor;
+        }
+
+        $.ajax({
+            type: "POST",
+            url: "/submit",
+            contentType: "application/json",
+            data: JSON.stringify(geojsonData),
+            success: function (response) {
+                alert(response.message);
+            }
+        });
+
+        document.getElementById('color-picker').style.display = 'none';
+    }
+
+    function submitCSV() {
+        var fileInput = document.getElementById('csvFile');
+        if (fileInput.files.length === 0) {
+            alert("Please select a CSV file.");
+            return;
+        }
+
+        var formData = new FormData();
+        formData.append("csvFile", fileInput.files[0]);
+
+        $.ajax({
+            type: "POST",
+            url: "/process_csv",
+            data: formData,
+            contentType: false,
+            processData: false,
+            success: function (response) {
+                alert("CSV processed successfully. Download the updated file.");
+                window.location.href = response.download_url; // Provide download link to the processed file
+            },
+            error: function () {
+                alert("Error processing CSV.");
+            }
+        });
+    }
+
+    function checkPoint() {
+        var lat = document.getElementById('latitude').value;
+        var lon = document.getElementById('longitude').value;
+
+        if (!lat || !lon) {
+            alert("Please enter both latitude and longitude.");
+            return;
+        }
+
+        $.ajax({
+            type: "GET",
+            url: "/check_point",
+            data: { lat: lat, lon: lon },
+            success: function (response) {
+                if (response.inside) {
+                    alert("The point is inside the area labeled: " + response.label);
+                } else {
+                    alert("The point is not inside any submitted area.");
+                }
+            },
+            error: function () {
+                alert("Error checking point.");
+            }
+        });
+    }
+
+    function fetchAndDrawPolygons() {
+        $.ajax({
+            type: "GET",
+            url: "/get_polygons",
+            success: function (response) {
+                var geoJsonLayer = L.geoJSON(response, {
+                    style: function (feature) {
+                        return {
+                            color: feature.properties.color || '#FF5733',
+                            fillOpacity: 0.5,
+                            weight: 2
+                        };
+                    },
+                    onEachFeature: function (feature, layer) {
+                        if (feature.properties && feature.properties.label) {
+                            layer.bindTooltip(feature.properties.label, {
+                                permanent: true,
+                                direction: 'center',
+                                className: 'polygon-label'
+                            }).openTooltip();
+                        }
+                        drawnItems.addLayer(layer);
+                    }
+                });
+                map.addLayer(geoJsonLayer);
+            },
+            error: function () {
+                alert("Error fetching polygons.");
+            }
+        });
+    }
+
+    fetchAndDrawPolygons();
+</script>
+</body>
+</html>

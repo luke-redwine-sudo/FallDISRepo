@@ -5,35 +5,27 @@ from bokeh.plotting import figure
 from bokeh.tile_providers import get_provider, ESRI_IMAGERY
 from bokeh.transform import linear_cmap
 from bokeh.palettes import Viridis256  # Make sure to import the palette
+import pandas as pd
+
+from ml import main
 
 import numpy as np
 import time
 import GNSSDataMonitor
 
-# Initialize data monitor and process GNSS data
-data_monitor = GNSSDataMonitor.GNSSDataMonitor()
-file_path = r"C:\Users\redwi\Downloads\ground_0911_GEOP255O.24o"
-data_monitor.process_direct_gnss_data(file_path)
-file_path = r"C:\Users\redwi\Downloads\drone_0911_GEOP255O.24o"
-data_monitor.process_reflected_gnss_data(file_path)
-data_monitor.merge_gnss_data()
+import tkinter as tk
+from tkinter import filedialog
 
-# Satellite location dictionary (update as needed)
-SATELLITE_DICT = {
-    "G05": [-40.1053319206459, 73.7422259685508],
-    "G06": [92.4202230899170, 11.9320217538312],
-    "G15": [-40.1053319206459, 73.7422259685508],
-    "G16": [92.4202230899170, 11.9320217538312],
-    "G25": [-40.1053319206459, 73.7422259685508],
-    "G26": [92.4202230899170, 11.9320217538312]
-}
-data_monitor.process_satellite_location_dict(SATELLITE_DICT)
+print("Loading Model")
+random = main()
+
+root = tk.Tk()
+root.withdraw()  # Hide the main window
 
 # Process flight data
-file_path = r"C:\Users\redwi\Downloads\0911_Flight.csv"
-data_monitor.process_flight_data(file_path)
-data_monitor.filter_satellites()
-data_monitor.merge_flight_data()
+file_path = filedialog.askopenfilename(filetypes=[("Flight Data", ".csv")])
+
+df = pd.read_csv(file_path)
 
 # Function to convert latitude and longitude to Web Mercator format
 def latlon_to_mercator(lat, lon):
@@ -45,11 +37,11 @@ def latlon_to_mercator(lat, lon):
 
 # Create a dictionary to group points by timestamp
 data_by_time = {}
-for index, row in data_monitor.combined_dataframe.iterrows():
+for index, row in df.iterrows():
     timestamp = row['DateTime']  # Replace with the actual timestamp column name
     lat = row['Lat']
     lon = row['Lng']
-    reflected_signal_strength = row["Reflected_Signal_Strength"]  # Get the signal strength
+    reflected_signal_strength = row["Reflectivity"]  # Get the signal strength
     if timestamp not in data_by_time:
         data_by_time[timestamp] = []
     data_by_time[timestamp].append((lat, lon, reflected_signal_strength))
@@ -72,7 +64,7 @@ plot.grid.visible = False
 source = ColumnDataSource(data=dict(x=[], y=[], strength=[]))
 
 # Create a color mapper
-color_mapper = LinearColorMapper(palette=Viridis256, low=0, high=50)  # Adjust palette as needed
+color_mapper = LinearColorMapper(palette=Viridis256, low=0, high=1)  # Adjust palette as needed
 from bokeh.transform import transform
 
 # Plot the drone's position with color mapping
@@ -107,6 +99,8 @@ slider = Slider(start=0, end=len(timestamps) - 1, value=0, step=1, title="Time",
 def update_slider(attr, old, new):
     index[0] = new
     # Collect all points up to the current timestamp
+
+
     points_to_display = []
     for i in range(index[0] + 1):  # Include all previous points
         timestamp = timestamps[i]
@@ -115,7 +109,7 @@ def update_slider(attr, old, new):
     # Update the data source with all points up to the current index
     new_data = dict(x=[point[0] for point in points_to_display],
                     y=[point[1] for point in points_to_display],
-                    strength=[point[2] for point in points_to_display])  # Include strength for color
+                    strength=[float(random.predict(np.array(point[2]).reshape(-1,1))[0]) for point in points_to_display])  # Include strength for color
     source.data = new_data
 
 slider.on_change('value', update_slider)
@@ -132,7 +126,8 @@ def update():
         # Update the data source with all points for the current timestamp
         new_data = dict(x=[point[0] for point in points],
                         y=[point[1] for point in points],
-                        strength=[point[2] for point in points])  # Include strength for color
+                        strength=[float(random.predict(np.array(point[2]).reshape(-1,1))[0]) for point in points])  # Include strength for color
+        print(new_data["strength"])
         source.stream(new_data)
 
         last_reset_time[0] = current_time  # Update last reset time
@@ -158,7 +153,7 @@ def update():
             last_reset_time[0] = None  # Reset the timer
 
 # Add periodic callback to update the plot
-curdoc().add_periodic_callback(update, 500)  # Update every 1000 ms
+curdoc().add_periodic_callback(update, 1000)  # Update every 1000 ms
 
 # Arrange layout and add to document
 curdoc().add_root(column(pause_button, slider, plot))

@@ -126,7 +126,7 @@ class GNSSDataMonitor:
         )
 
         self.combined_dataframe = self.combined_dataframe.dropna()
-        self.combined_dataframe = self.combined_dataframe.drop(columns=['index_x', 'index_y', 'Q1', 'Q2', 'Q3', 'Q4'])
+        self.combined_dataframe = self.combined_dataframe.drop(columns=['index_x', 'index_y'])
 
         self.combined_dataframe["Alt"] = self.combined_dataframe["Alt"].astype("float32")
         self.combined_dataframe["Adjust_LAT_M"] = 0
