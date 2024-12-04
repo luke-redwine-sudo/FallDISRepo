@@ -76,7 +76,7 @@ def read_data(dir_path):
     plt.ylabel('Density')
 
     # Show the plot
-    plt.show()
+    #plt.show()
 
     return read_df
 
@@ -308,7 +308,7 @@ def get_kmeans(x_train, y_train, x_test, y_true, xt_test, water, not_water):
     # plt.scatter(all_red['LAT'], all_red['LON'], color='red', alpha=0.2)
 
     # plt.scatter(x_test, x_test, cmap={'blue', 1: 'red'})
-    plt.show()
+    #plt.show()
 
 # Visualizations
 # 1. Scores
@@ -324,7 +324,7 @@ def get_kmeans(x_train, y_train, x_test, y_true, xt_test, water, not_water):
 def main():
     # Path to highest level data directory
     # dir_path = 'D:/redwi/Documents/Thesis Data/'
-    dir_path = 'C:/Users/redwi/OneDrive/Desktop/Data - Copy/'
+    dir_path = 'D:/redwi/Documents/Thesis Data/Data - Copy/'
 
     # Read in data from directories
     df = read_data(dir_path)
@@ -348,7 +348,7 @@ def main():
     plt.ylabel('Density')
 
     # Show the plot
-    plt.show()
+    #plt.show()
 
     # Fill empty values
     # df = clean_data(df)
@@ -414,6 +414,7 @@ def main():
 
         # Call models
         _ = get_decision_tree(X_train, Y_train, X_test, Y_test, class_weight=class_weight_dict)
+        d = _
 
         _ = get_extra_tree(X_train, Y_train, X_test, Y_test, 'random')
 
@@ -455,7 +456,7 @@ def main():
 # -------------------------------------------------------------------------------------------
     # 'Deep' Learning Model
 
-    return r
+    return r, d
 
 
 

@@ -97,19 +97,21 @@ def get_NN(x_train, y_train, x_val, y_val, x_test, y_test):
     plt.plot(history.history['loss'], label='Loss')
     plt.plot(history.history['val_loss'], label='Val Loss')
     plt.legend()
-    plt.show()
+    #plt.show()
 
     plt.figure()
     plt.plot(history.history['loss'], label='Loss')
     plt.plot(history.history['accuracy'], label='Val Loss')
     plt.legend()
-    plt.show()
+    #plt.show()
+
+    return model
 
 
 def main():
     # Path to highest level data directory
     # dir_path = 'D:/redwi/Documents/Thesis Data/'
-    dir_path = 'C:/Users/redwi/OneDrive/Desktop/Data - Copy/'
+    dir_path = 'D:/redwi/Documents/Thesis Data/Data - Copy/'
 
     # Read in data from directories
     df = read_data(dir_path)
@@ -166,8 +168,8 @@ def main():
 
 # -------------------------------------------------------------------------------------------
 # 'Deep' Learning Model
-    get_NN(X_train, Y_train, X_val, Y_val, X_test, Y_test)
-
+    nn = get_NN(X_train, Y_train, X_val, Y_val, X_test, Y_test)
+    return nn
 
 if __name__=="__main__":
     main()

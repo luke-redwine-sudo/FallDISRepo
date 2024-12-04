@@ -1,13 +1,15 @@
 from bokeh.io import show, curdoc
-from bokeh.layouts import column
+from bokeh.layouts import column, row
 from bokeh.models import ColumnDataSource, Button, Slider, LinearColorMapper, ColorBar, LinearAxis
 from bokeh.plotting import figure
 from bokeh.tile_providers import get_provider, ESRI_IMAGERY
 from bokeh.transform import linear_cmap
 from bokeh.palettes import Viridis256  # Make sure to import the palette
+from bokeh.models import HoverTool
 import pandas as pd
 
-from ml import main
+import ml
+import NN
 
 import numpy as np
 import time
@@ -17,7 +19,11 @@ import tkinter as tk
 from tkinter import filedialog
 
 print("Loading Model")
-random = main()
+random, decision_tree = ml.main()
+neural_network = NN.main()
+
+
+selected_model = {"name": "Random Forest"}
 
 root = tk.Tk()
 root.withdraw()  # Hide the main window
@@ -37,11 +43,11 @@ def latlon_to_mercator(lat, lon):
 
 # Create a dictionary to group points by timestamp
 data_by_time = {}
-for index, row in df.iterrows():
-    timestamp = row['DateTime']  # Replace with the actual timestamp column name
-    lat = row['Lat']
-    lon = row['Lng']
-    reflected_signal_strength = row["Reflectivity"]  # Get the signal strength
+for index, row_i in df.iterrows():
+    timestamp = row_i['DateTime']  # Replace with the actual timestamp column name
+    lat = row_i['Lat']
+    lon = row_i['Lng']
+    reflected_signal_strength = row_i["Reflectivity"]  # Get the signal strength
     if timestamp not in data_by_time:
         data_by_time[timestamp] = []
     data_by_time[timestamp].append((lat, lon, reflected_signal_strength))
@@ -68,7 +74,17 @@ color_mapper = LinearColorMapper(palette=Viridis256, low=0, high=1)  # Adjust pa
 from bokeh.transform import transform
 
 # Plot the drone's position with color mapping
-plot.circle(x="x", y="y", size=10, fill_color=transform('strength', color_mapper), fill_alpha=0.8, source=source)
+circle_renderer = plot.circle(x="x", y="y", size=10, fill_color=transform('strength', color_mapper), fill_alpha=0.8, source=source)
+
+# Add a HoverTool for displaying strength values
+hover_tool = HoverTool(
+    renderers=[circle_renderer],
+    tooltips=[
+        ("Strength", "@strength")
+    ]
+)
+
+plot.add_tools(hover_tool)
 
 # Add a color bar
 color_bar = ColorBar(color_mapper=color_mapper, location=(0, 0))
@@ -100,16 +116,31 @@ def update_slider(attr, old, new):
     index[0] = new
     # Collect all points up to the current timestamp
 
+    #mercator_paths[timestamps[(index[0] + 1)]] = [[list(item)[0], list(item)[1], float(neural_network.predict(np.array(list(item)[2]).reshape(-1,1))[0])] for item in mercator_paths[timestamps[(index[0] + 1)]]]
 
+    print(selected_model["name"])
+
+    if selected_model["name"] == "Random Forest":
+        mercator_paths[timestamps[(index[0] + 1)]] = [[list(item)[0], list(item)[1], float(random.predict(np.array(list(item)[2]).reshape(-1,1))[0])] for item in mercator_paths[timestamps[(index[0] + 1)]]]
+    elif selected_model["name"] == "Decision Tree":
+        mercator_paths[timestamps[(index[0] + 1)]] = [[list(item)[0], list(item)[1], float(decision_tree.predict(np.array(list(item)[2]).reshape(-1,1))[0])] for item in mercator_paths[timestamps[(index[0] + 1)]]]
+    else:
+        [print(neural_network.predict(np.array(list(item)[2]).reshape(-1,1))[0][0]) for item in mercator_paths[timestamps[(index[0])]]]
+        mercator_paths[timestamps[(index[0] + 1)]] = [[list(item)[0], list(item)[1], float(round(neural_network.predict(np.array(list(item)[2]).reshape(-1,1))[0][0]))] for item in mercator_paths[timestamps[(index[0] + 1)]]]
+
+    print(mercator_paths[timestamps[(index[0] + 1)]])
+    print("-------------------------------------------------------------------")
     points_to_display = []
     for i in range(index[0] + 1):  # Include all previous points
         timestamp = timestamps[i]
         points_to_display.extend(mercator_paths[timestamp])
 
+
     # Update the data source with all points up to the current index
     new_data = dict(x=[point[0] for point in points_to_display],
                     y=[point[1] for point in points_to_display],
-                    strength=[float(random.predict(np.array(point[2]).reshape(-1,1))[0]) for point in points_to_display])  # Include strength for color
+                    strength=[point[2] for point in points_to_display])  # Include strength for color
+
     source.data = new_data
 
 slider.on_change('value', update_slider)
@@ -121,13 +152,20 @@ def update():
 
     if index[0] < len(timestamps):
         timestamp = timestamps[index[0]]
+        if selected_model["name"] == "Random Forest":
+            mercator_paths[timestamps[(index[0])]] = [[list(item)[0], list(item)[1], float(random.predict(np.array(list(item)[2]).reshape(-1,1))[0])] for item in mercator_paths[timestamps[(index[0])]]]
+        elif selected_model["name"] == "Decision Tree":
+            mercator_paths[timestamps[(index[0])]] = [[list(item)[0], list(item)[1], float(decision_tree.predict(np.array(list(item)[2]).reshape(-1,1))[0])] for item in mercator_paths[timestamps[(index[0])]]]
+        else:
+            [print(neural_network.predict(np.array(list(item)[2]).reshape(-1,1))[0][0]) for item in mercator_paths[timestamps[(index[0])]]]
+            mercator_paths[timestamps[(index[0])]] = [[list(item)[0], list(item)[1], float(round(neural_network.predict(np.array(list(item)[2]).reshape(-1,1))[0][0]))] for item in mercator_paths[timestamps[(index[0])]]]
+
         points = mercator_paths[timestamp]
 
         # Update the data source with all points for the current timestamp
         new_data = dict(x=[point[0] for point in points],
                         y=[point[1] for point in points],
-                        strength=[float(random.predict(np.array(point[2]).reshape(-1,1))[0]) for point in points])  # Include strength for color
-        print(new_data["strength"])
+                        strength=[point[2] for point in points])  # Include strength for color
         source.stream(new_data)
 
         last_reset_time[0] = current_time  # Update last reset time
@@ -152,11 +190,30 @@ def update():
             slider.value = index[0]  # Reset slider position
             last_reset_time[0] = None  # Reset the timer
 
+
+# Callback function for button clicks
+def button_callback(event_label):
+    print(f"Button clicked: {event_label}")
+    selected_model["name"] = event_label
+
+# Create three buttons
+button1 = Button(label="Random Forest", width=150)
+button2 = Button(label="Decision Tree", width=150)
+button3 = Button(label="Neural Network", width=150)
+
+# Attach the same function to all buttons
+button1.on_click(lambda: button_callback("Random Forest"))
+button2.on_click(lambda: button_callback("Decision Tree"))
+button3.on_click(lambda: button_callback("Neural Network"))
+
+# Arrange the buttons in a row
+button_row = row(button1, button2, button3)
+
 # Add periodic callback to update the plot
 curdoc().add_periodic_callback(update, 1000)  # Update every 1000 ms
 
 # Arrange layout and add to document
-curdoc().add_root(column(pause_button, slider, plot))
+curdoc().add_root(column(column(pause_button, slider, plot), button_row))
 
 # Display the plot in a browser
 show(plot)
