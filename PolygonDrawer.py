@@ -55,8 +55,8 @@ class PolygonDrawer:
             locations=coordinates,
             color='blue',
             fill=True,
-            fill_opacity=0.4,
-            tooltip=label
+            fill_opacity=0.4#,
+            #tooltip=label
         ).add_to(self.map)
 
     def is_point_in_polygon(self, lat, lon):

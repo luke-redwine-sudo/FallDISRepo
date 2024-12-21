@@ -10,6 +10,7 @@ import pandas as pd
 
 import ml
 import NN
+import ts
 
 import numpy as np
 import time
@@ -18,12 +19,17 @@ import GNSSDataMonitor
 import tkinter as tk
 from tkinter import filedialog
 
-print("Loading Model")
+print("Loading Models...")
+print("Random Forest")
+print("Decision Tree")
 random, decision_tree = ml.main()
+print("Neural Network")
 neural_network = NN.main()
+print("CNN")
+cnn = ts.main()
 
 
-selected_model = {"name": "Random Forest"}
+selected_model = {"name": "CNN"}
 
 root = tk.Tk()
 root.withdraw()  # Hide the main window
@@ -55,6 +61,7 @@ for index, row_i in df.iterrows():
 # Prepare the path for animation
 timestamps = list(data_by_time.keys())
 mercator_paths = {ts: [latlon_to_mercator(lat, lon) + (float(strength),) for lat, lon, strength in points] for ts, points in data_by_time.items()}
+POINTS_SO_FAR = []
 
 # Initial map setup
 tile_provider = get_provider(ESRI_IMAGERY)
@@ -114,18 +121,31 @@ slider = Slider(start=0, end=len(timestamps) - 1, value=0, step=1, title="Time",
 
 def update_slider(attr, old, new):
     index[0] = new
+
     # Collect all points up to the current timestamp
 
     #mercator_paths[timestamps[(index[0] + 1)]] = [[list(item)[0], list(item)[1], float(neural_network.predict(np.array(list(item)[2]).reshape(-1,1))[0])] for item in mercator_paths[timestamps[(index[0] + 1)]]]
 
     print(selected_model["name"])
 
+    global POINTS_SO_FAR
+
+    #POINTS_SO_FAR.append([[list(item)[0], list(item)[1],list(item)[2]] for item in mercator_paths[timestamps[(index[0] + 1)]]])
+    #[print([list(item)[0], list(item)[1],list(item)[2]]) for item in mercator_paths[timestamps[(index[0] + 1)]]]
+
     if selected_model["name"] == "Random Forest":
         mercator_paths[timestamps[(index[0] + 1)]] = [[list(item)[0], list(item)[1], float(random.predict(np.array(list(item)[2]).reshape(-1,1))[0])] for item in mercator_paths[timestamps[(index[0] + 1)]]]
     elif selected_model["name"] == "Decision Tree":
         mercator_paths[timestamps[(index[0] + 1)]] = [[list(item)[0], list(item)[1], float(decision_tree.predict(np.array(list(item)[2]).reshape(-1,1))[0])] for item in mercator_paths[timestamps[(index[0] + 1)]]]
+    elif selected_model["name"] == "CNN":
+        if len(POINTS_SO_FAR) < 30:
+            mercator_paths[timestamps[(index[0] + 1)]] = [[list(item)[0], list(item)[1], 0] for item in mercator_paths[timestamps[(index[0] + 1)]]]
+        else:
+            # print(np.array(POINTS_SO_FAR[-149:]).shape)
+            # [print(np.array(POINTS_SO_FAR[-149:] + [item[2]]).reshape(-1,1).shape) for item in mercator_paths[timestamps[(index[0] + 1)]]]
+            mercator_paths[timestamps[(index[0] + 1)]] = [[list(item)[0], list(item)[1], round(float(cnn.predict(np.array(POINTS_SO_FAR[-29:] + [item[2]]).reshape(1,-1))[0]))] for item in mercator_paths[timestamps[(index[0] + 1)]]]
     else:
-        [print(neural_network.predict(np.array(list(item)[2]).reshape(-1,1))[0][0]) for item in mercator_paths[timestamps[(index[0])]]]
+        #[print(neural_network.predict(np.array(list(item)[2]).reshape(-1,1))[0][0]) for item in mercator_paths[timestamps[(index[0])]]]
         mercator_paths[timestamps[(index[0] + 1)]] = [[list(item)[0], list(item)[1], float(round(neural_network.predict(np.array(list(item)[2]).reshape(-1,1))[0][0]))] for item in mercator_paths[timestamps[(index[0] + 1)]]]
 
     print(mercator_paths[timestamps[(index[0] + 1)]])
@@ -150,12 +170,25 @@ def update():
     if paused[0]:
         return  # Do not update if the animation is paused
 
+    global POINTS_SO_FAR
+
+    CURRENT_POINTS = []
+    for item in mercator_paths[timestamps[(index[0]) + 2]]:
+        POINTS_SO_FAR.append(list(item)[2])
+
     if index[0] < len(timestamps):
         timestamp = timestamps[index[0]]
         if selected_model["name"] == "Random Forest":
             mercator_paths[timestamps[(index[0])]] = [[list(item)[0], list(item)[1], float(random.predict(np.array(list(item)[2]).reshape(-1,1))[0])] for item in mercator_paths[timestamps[(index[0])]]]
         elif selected_model["name"] == "Decision Tree":
             mercator_paths[timestamps[(index[0])]] = [[list(item)[0], list(item)[1], float(decision_tree.predict(np.array(list(item)[2]).reshape(-1,1))[0])] for item in mercator_paths[timestamps[(index[0])]]]
+        elif selected_model["name"] == "CNN":
+            if len(POINTS_SO_FAR) < 30:
+                mercator_paths[timestamps[(index[0] + 1)]] = [[list(item)[0], list(item)[1], 0] for item in mercator_paths[timestamps[(index[0] + 1)]]]
+            else:
+                # print(np.array(POINTS_SO_FAR[-149:]).shape)
+                # [print(np.array(POINTS_SO_FAR[-149:] + [item[2]]).reshape(-1,1).shape) for item in mercator_paths[timestamps[(index[0] + 1)]]]
+                mercator_paths[timestamps[(index[0] + 1)]] = [[list(item)[0], list(item)[1], round(float(cnn.predict(np.array(POINTS_SO_FAR[-29:] + [item[2]]).reshape(1,-1))[0]))] for item in mercator_paths[timestamps[(index[0] + 1)]]]
         else:
             [print(neural_network.predict(np.array(list(item)[2]).reshape(-1,1))[0][0]) for item in mercator_paths[timestamps[(index[0])]]]
             mercator_paths[timestamps[(index[0])]] = [[list(item)[0], list(item)[1], float(round(neural_network.predict(np.array(list(item)[2]).reshape(-1,1))[0][0]))] for item in mercator_paths[timestamps[(index[0])]]]
@@ -200,14 +233,16 @@ def button_callback(event_label):
 button1 = Button(label="Random Forest", width=150)
 button2 = Button(label="Decision Tree", width=150)
 button3 = Button(label="Neural Network", width=150)
+button4 = Button(label="CNN", width=150)
 
 # Attach the same function to all buttons
 button1.on_click(lambda: button_callback("Random Forest"))
 button2.on_click(lambda: button_callback("Decision Tree"))
 button3.on_click(lambda: button_callback("Neural Network"))
+button4.on_click(lambda: button_callback("CNN"))
 
 # Arrange the buttons in a row
-button_row = row(button1, button2, button3)
+button_row = row(button1, button2, button3, button4)
 
 # Add periodic callback to update the plot
 curdoc().add_periodic_callback(update, 1000)  # Update every 1000 ms

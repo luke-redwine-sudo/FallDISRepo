@@ -354,7 +354,7 @@ def main():
     # df = clean_data(df)
 
     # Undersample data
-    undersample = False
+    undersample = True
     if undersample == True:
         num_samples = len(df[df['Crop'] == 'water'])
 
